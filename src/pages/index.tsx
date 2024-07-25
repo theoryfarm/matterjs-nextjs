@@ -1,3 +1,5 @@
+'use client'
+
 /* eslint-disable no-console */
 import React, { useEffect, useRef, useState } from 'react'
 import Matter from 'matter-js'
@@ -13,13 +15,41 @@ declare global {
   }
 }
 
+function Gamepad() {
+  const [axes, setAxes] = useState(null)
+
+  useEffect(() => {
+    const onGamePad = (e) => {
+      setAxes(e?.detail?.axes.map((a) => (Math.abs(a * 100) < 6 ? 0 : (a * 100).toFixed(2))))
+    }
+
+    window.addEventListener('gamepadhit', onGamePad)
+
+    return () => {
+      window.removeEventListener('gamepadhit', onGamePad)
+    }
+  }, [])
+
+  return (
+    <div className='Gamepads'>
+      <h1>Gamepads</h1>
+      {JSON.stringify(axes)}
+    </div>
+  )
+}
+
 export default function Page() {
   const canvas = useRef(null)
   const world = useRef<Matter.World>()
   const engineRef = useRef<Matter.Engine>()
   const runnerRef = useRef<Matter.Runner>()
   const [objectsCount, objectsCountSet] = useState(0)
+  const [showGamePad, setShowGamePad] = useState(false)
   const [fps, fpsSet] = useState(0)
+
+  useEffect(function onFirstMount() {
+    setShowGamePad(true)
+  }, [])
 
   useEffect(() => {
     if (runnerRef.current) {
@@ -37,7 +67,7 @@ export default function Page() {
     }
   }, [canvas, world])
 
-  const WIDTH = 1000
+  const WIDTH = 1200
   const HEIGHT = 700
 
   function createWorld() {
@@ -62,35 +92,77 @@ export default function Page() {
       } as Matter.IRendererOptions,
     }) as Matter.Render & { mouse: any }
 
-    const wallBorderWidth = 25
+    const wallBorderWidth = 10
     const wallLength = 500
+    let ballCollections: any[] = []
+
+    var collider = Bodies.rectangle(0, HEIGHT - 100, WIDTH * 2, wallBorderWidth, {
+      isStatic: true,
+      isSensor: true,
+      render: {
+        fillStyle: '#ffcccc',
+        opacity: 0.5,
+      },
+    })
+
+    for (let index = 0; index < 13; index++) {
+      const element = 'test'
+      let wall = Bodies.rectangle(index * 100, HEIGHT, wallBorderWidth, wallLength, {
+        isStatic: true,
+        chamfer: { radius: 5 },
+        render: {
+          fillStyle: '#000000',
+        },
+      })
+      World.add(engine.world, wall)
+
+      if (index > 0) {
+        let sensor = Bodies.rectangle(index * 100 + 50, HEIGHT - 100, 100, wallBorderWidth, {
+          isStatic: true,
+          isSensor: true,
+          label: index.toString(),
+          render: {
+            // add index converted to hex
+            fillStyle: '#' + (index * 500).toString(16).substring(0, 4),
+            opacity: 0.5,
+            //visible: false,
+          },
+        })
+
+        World.add(engine.world, sensor)
+        ballCollections[sensor.id] = []
+      }
+    }
 
     // walls
     World.add(engine.world, [
       // celling
-      // Bodies.rectangle(WIDTH / 2, HEIGHT / 4, wallLength, wallBorderWidth, { isStatic: true }),
+      //Bodies.rectangle(WIDTH / 2, HEIGHT / 4, wallLength, wallBorderWidth, { isStatic: true }),
       // ground
-      Bodies.rectangle(WIDTH / 2, HEIGHT - HEIGHT / 4, wallLength * 0.7, wallBorderWidth, {
-        isStatic: true,
-      }),
+      // Bodies.rectangle(WIDTH / 2, HEIGHT - HEIGHT / 4, wallLength * 0.7, wallBorderWidth, {
+      //   isStatic: true,
+      // }),
 
       // ground 2
-      Bodies.rectangle(WIDTH / 2, HEIGHT - 30, WIDTH * 0.9, wallBorderWidth, {
+      Bodies.rectangle(0, HEIGHT, WIDTH * 2, wallBorderWidth, {
         isStatic: true,
       }),
 
-      Bodies.rectangle(
-        WIDTH / 3 + WIDTH / 3,
-        HEIGHT - HEIGHT / 2,
-        wallBorderWidth,
-        wallLength * 0.2,
-        {
-          isStatic: true,
-        }
-      ),
-      Bodies.rectangle(WIDTH / 3, HEIGHT - HEIGHT / 2, wallBorderWidth, wallLength * 0.2, {
-        isStatic: true,
-      }),
+      //sensor
+      //collider,
+
+      // Bodies.rectangle(
+      //   WIDTH / 3 + WIDTH / 3,
+      //   HEIGHT - HEIGHT / 2,
+      //   wallBorderWidth,
+      //   wallLength * 0.7,
+      //   {
+      //     isStatic: true,
+      //   }
+      // ),
+      // Bodies.rectangle(WIDTH / 3, HEIGHT - HEIGHT / 2, wallBorderWidth, wallLength * 0.6, {
+      //   isStatic: true,
+      // }),
     ])
 
     // MOUSE
@@ -121,11 +193,46 @@ export default function Page() {
       if (mouseIsDragging === false) {
         setIntervalId = setInterval(() => {
           createBalls(ev.source.mouse.position)
-        }, (1000 / 60) * 3)
+        }, 1)
       }
     })
     Matter.Events.on(mouseConstraint, 'mouseup', () => {
       clearInterval(setIntervalId)
+    })
+
+    Events.on(engine, 'collisionStart', function (event) {
+      var pairs = event.pairs
+
+      for (var i = 0, j = pairs.length; i != j; ++i) {
+        var pair = pairs[i]
+
+        if (pair.bodyA.isSensor) {
+          pair.bodyB.render.fillStyle = pair.bodyA.render.fillStyle
+          if (
+            ballCollections[pair.bodyA.id] &&
+            !ballCollections[pair.bodyA.id].find((f) => f == pair.bodyB.id)
+          ) {
+            ballCollections[pair.bodyA.id].push(pair.bodyB.id)
+            if (ballCollections[pair.bodyA.id].length > 60) {
+              //remove first 60 elements
+              ballCollections[pair.bodyA.id].slice(0, 60).forEach((id) => {
+                engine.world.bodies.find((b) => b.id == id) &&
+                  World.remove(engine.world, engine.world.bodies.find((b) => b.id == id)!)
+              })
+
+              ballCollections[pair.bodyA.id].splice(0, 60)
+            }
+          }
+
+          //console.log(ballCollections)
+        }
+
+        // if (pair.bodyA === collider) {
+        //   pair.bodyB.render.strokeStyle = colorA;
+        // } else if (pair.bodyB === collider) {
+        //   pair.bodyA.render.strokeStyle = colorA;
+        // }
+      }
     })
 
     //
@@ -155,13 +262,19 @@ export default function Page() {
         Bodies.circle(
           positionXY.x + getRandom(15) || WIDTH / 2,
           positionXY.y + getRandom(15) || HEIGHT / 2,
-          30 * Math.random() + 10,
-          { restitution: 0.7 }
+          7,
+          {
+            restitution: 0.9,
+            friction: 0.0001,
+            render: {
+              fillStyle: '#fff',
+            },
+          }
         )
       )
     }
 
-    createBalls()
+    //createBalls()
 
     Render.run(render)
 
@@ -199,6 +312,8 @@ export default function Page() {
         bodies count: {objectsCount}
       </div>
       <div className='mx-3 border select-none border-indigo-600p-3'>fps: {fps}</div>
+      {showGamePad && <Gamepad />}
+      <h2 id='start'>Press a button on your controller to start</h2>
     </div>
   )
 }

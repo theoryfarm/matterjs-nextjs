@@ -15,6 +15,8 @@ export default class MyDocument extends Document {
             href='https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap'
             rel='stylesheet'
           />
+
+          <script type='text/javascript' src='/gamepadtest.js'></script>
           {/* Global Site Tag (gtag.js) - Google Analytics */}
           {googleAnalytics.length > 0 && (
             <>
